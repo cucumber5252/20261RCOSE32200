@@ -1,4 +1,4 @@
-# 20261RCOSE32200 Shell Project
+# 20261RCOSE32200 Optional Project
 
 간단한 Unix-like shell을 C 언어로 구현한 프로젝트입니다.
 사용자로부터 명령어를 입력받아 파싱한 뒤, 외부 명령어 실행, built-in 명령어 처리, 입출력 리다이렉션, 백그라운드 실행, 단일 파이프 기능을 지원합니다.
