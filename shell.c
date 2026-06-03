@@ -1,3 +1,6 @@
+#define _POSIX_C_SOURCE 200809L
+
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,7 +27,6 @@ static int parse(char *buf, char *argv[]) {
     return argc;
 }
 
-/* 마지막 토큰이 "&"이면 제거하고 1 반환 */
 static int check_bg(char *argv[], int *argc) {
     if (*argc > 0 && strcmp(argv[*argc - 1], "&") == 0) {
         argv[--(*argc)] = NULL;
@@ -33,19 +35,42 @@ static int check_bg(char *argv[], int *argc) {
     return 0;
 }
 
-static void execute(char *argv[], int bg) {
-    pid_t pid = fork();
-    if (pid < 0) {
-        perror("fork");
-        return;
+/* < > 토큰을 argv에서 찾아 dup2 처리 후 제거 */
+static void setup_redir(char *argv[], int *argc) {
+    for (int i = 0; i < *argc; i++) {
+        if (strcmp(argv[i], ">") == 0 && i + 1 < *argc) {
+            int fd = open(argv[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (fd < 0) { perror("open"); exit(EXIT_FAILURE); }
+            dup2(fd, STDOUT_FILENO);
+            close(fd);
+            for (int j = i; j < *argc - 2; j++) argv[j] = argv[j + 2];
+            *argc -= 2;
+            argv[*argc] = NULL;
+            i--;
+        } else if (strcmp(argv[i], "<") == 0 && i + 1 < *argc) {
+            int fd = open(argv[i + 1], O_RDONLY);
+            if (fd < 0) { perror("open"); exit(EXIT_FAILURE); }
+            dup2(fd, STDIN_FILENO);
+            close(fd);
+            for (int j = i; j < *argc - 2; j++) argv[j] = argv[j + 2];
+            *argc -= 2;
+            argv[*argc] = NULL;
+            i--;
+        }
     }
+}
+
+static void execute(char *argv[], int argc, int bg) {
+    pid_t pid = fork();
+    if (pid < 0) { perror("fork"); return; }
     if (pid == 0) {
+        setup_redir(argv, &argc);
         execvp(argv[0], argv);
         perror(argv[0]);
         exit(EXIT_FAILURE);
     } else {
         if (bg) {
-            printf("[%d]\n", pid);   /* 백그라운드: 기다리지 않음 */
+            printf("[%d]\n", pid);
         } else {
             int status;
             waitpid(pid, &status, 0);
@@ -61,17 +86,14 @@ static int builtin(char *argv[]) {
 
     if (strcmp(argv[0], "cd") == 0) {
         const char *path = argv[1] ? argv[1] : getenv("HOME");
-        if (chdir(path) < 0)
-            perror("cd");
+        if (chdir(path) < 0) perror("cd");
         return 1;
     }
 
     if (strcmp(argv[0], "pwd") == 0) {
         char cwd[BUF_SIZE];
-        if (getcwd(cwd, sizeof(cwd)))
-            printf("%s\n", cwd);
-        else
-            perror("pwd");
+        if (getcwd(cwd, sizeof(cwd))) printf("%s\n", cwd);
+        else perror("pwd");
         return 1;
     }
 
@@ -104,7 +126,7 @@ int main(void) {
         if (argc == 0)
             continue;
 
-        execute(argv, bg);
+        execute(argv, argc, bg);
     }
 
     return 0;
