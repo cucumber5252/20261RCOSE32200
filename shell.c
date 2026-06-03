@@ -35,7 +35,6 @@ static int check_bg(char *argv[], int *argc) {
     return 0;
 }
 
-/* < > 토큰을 argv에서 찾아 dup2 처리 후 제거 */
 static void setup_redir(char *argv[], int *argc) {
     for (int i = 0; i < *argc; i++) {
         if (strcmp(argv[i], ">") == 0 && i + 1 < *argc) {
@@ -44,30 +43,72 @@ static void setup_redir(char *argv[], int *argc) {
             dup2(fd, STDOUT_FILENO);
             close(fd);
             for (int j = i; j < *argc - 2; j++) argv[j] = argv[j + 2];
-            *argc -= 2;
-            argv[*argc] = NULL;
-            i--;
+            *argc -= 2; argv[*argc] = NULL; i--;
         } else if (strcmp(argv[i], "<") == 0 && i + 1 < *argc) {
             int fd = open(argv[i + 1], O_RDONLY);
             if (fd < 0) { perror("open"); exit(EXIT_FAILURE); }
             dup2(fd, STDIN_FILENO);
             close(fd);
             for (int j = i; j < *argc - 2; j++) argv[j] = argv[j + 2];
-            *argc -= 2;
-            argv[*argc] = NULL;
-            i--;
+            *argc -= 2; argv[*argc] = NULL; i--;
         }
     }
 }
 
+static int find_pipe(char *argv[], int argc) {
+    for (int i = 0; i < argc; i++)
+        if (strcmp(argv[i], "|") == 0)
+            return i;
+    return -1;
+}
+
+static void execute_pipe(char *argv[], int argc) {
+    int p = find_pipe(argv, argc);
+    argv[p] = NULL;
+    char **left = argv, **right = argv + p + 1;
+    int la = p, ra = argc - p - 1;
+
+    int pfd[2];
+    if (pipe(pfd) < 0) { perror("pipe"); return; }
+
+    pid_t p1 = fork();
+    if (p1 < 0) { perror("fork"); return; }
+    if (p1 == 0) {
+        close(pfd[0]);
+        dup2(pfd[1], STDOUT_FILENO);
+        close(pfd[1]);
+        setup_redir(left, &la);
+        execvp(left[0], left);
+        perror(left[0]); exit(EXIT_FAILURE);
+    }
+
+    pid_t p2 = fork();
+    if (p2 < 0) { perror("fork"); return; }
+    if (p2 == 0) {
+        close(pfd[1]);
+        dup2(pfd[0], STDIN_FILENO);
+        close(pfd[0]);
+        setup_redir(right, &ra);
+        execvp(right[0], right);
+        perror(right[0]); exit(EXIT_FAILURE);
+    }
+
+    close(pfd[0]); close(pfd[1]);
+    waitpid(p1, NULL, 0);
+    waitpid(p2, NULL, 0);
+}
+
 static void execute(char *argv[], int argc, int bg) {
+    if (find_pipe(argv, argc) >= 0) {
+        execute_pipe(argv, argc);
+        return;
+    }
     pid_t pid = fork();
     if (pid < 0) { perror("fork"); return; }
     if (pid == 0) {
         setup_redir(argv, &argc);
         execvp(argv[0], argv);
-        perror(argv[0]);
-        exit(EXIT_FAILURE);
+        perror(argv[0]); exit(EXIT_FAILURE);
     } else {
         if (bg) {
             printf("[%d]\n", pid);
@@ -81,8 +122,7 @@ static void execute(char *argv[], int argc, int bg) {
 }
 
 static int builtin(char *argv[]) {
-    if (strcmp(argv[0], "exit") == 0)
-        exit(0);
+    if (strcmp(argv[0], "exit") == 0) exit(0);
 
     if (strcmp(argv[0], "cd") == 0) {
         const char *path = argv[1] ? argv[1] : getenv("HOME");
