@@ -35,8 +35,18 @@ static void execute(char *argv[]) {
         perror(argv[0]);
         exit(EXIT_FAILURE);
     } else {
-        wait(NULL);
+        int status;
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status) && WEXITSTATUS(status) != 0)
+            printf("[exit %d]\n", WEXITSTATUS(status));
     }
+}
+
+/* 반환값: 빌트인이면 1, 아니면 0 */
+static int builtin(char *argv[]) {
+    if (strcmp(argv[0], "exit") == 0)
+        exit(0);
+    return 0;
 }
 
 int main(void) {
@@ -58,7 +68,8 @@ int main(void) {
         if (argc == 0)
             continue;
 
-        execute(argv);
+        if (!builtin(argv))
+            execute(argv);
     }
 
     return 0;
