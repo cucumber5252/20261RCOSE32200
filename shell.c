@@ -24,7 +24,16 @@ static int parse(char *buf, char *argv[]) {
     return argc;
 }
 
-static void execute(char *argv[]) {
+/* 마지막 토큰이 "&"이면 제거하고 1 반환 */
+static int check_bg(char *argv[], int *argc) {
+    if (*argc > 0 && strcmp(argv[*argc - 1], "&") == 0) {
+        argv[--(*argc)] = NULL;
+        return 1;
+    }
+    return 0;
+}
+
+static void execute(char *argv[], int bg) {
     pid_t pid = fork();
     if (pid < 0) {
         perror("fork");
@@ -35,10 +44,14 @@ static void execute(char *argv[]) {
         perror(argv[0]);
         exit(EXIT_FAILURE);
     } else {
-        int status;
-        waitpid(pid, &status, 0);
-        if (WIFEXITED(status) && WEXITSTATUS(status) != 0)
-            printf("[exit %d]\n", WEXITSTATUS(status));
+        if (bg) {
+            printf("[%d]\n", pid);   /* 백그라운드: 기다리지 않음 */
+        } else {
+            int status;
+            waitpid(pid, &status, 0);
+            if (WIFEXITED(status) && WEXITSTATUS(status) != 0)
+                printf("[exit %d]\n", WEXITSTATUS(status));
+        }
     }
 }
 
@@ -84,8 +97,14 @@ int main(void) {
         if (argc == 0)
             continue;
 
-        if (!builtin(argv))
-            execute(argv);
+        if (builtin(argv))
+            continue;
+
+        int bg = check_bg(argv, &argc);
+        if (argc == 0)
+            continue;
+
+        execute(argv, bg);
     }
 
     return 0;
