@@ -46,11 +46,19 @@ static int builtin(char *argv[]) {
     if (strcmp(argv[0], "exit") == 0)
         exit(0);
 
-    /* cd: execvp로는 현재 프로세스 cwd를 못 바꾸므로 빌트인 처리 */
     if (strcmp(argv[0], "cd") == 0) {
         const char *path = argv[1] ? argv[1] : getenv("HOME");
         if (chdir(path) < 0)
             perror("cd");
+        return 1;
+    }
+
+    if (strcmp(argv[0], "pwd") == 0) {
+        char cwd[BUF_SIZE];
+        if (getcwd(cwd, sizeof(cwd)))
+            printf("%s\n", cwd);
+        else
+            perror("pwd");
         return 1;
     }
 
