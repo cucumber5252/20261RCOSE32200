@@ -1,5 +1,8 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #define BUF_SIZE 1024
 #define MAX_ARGS 64
@@ -21,6 +24,21 @@ static int parse(char *buf, char *argv[]) {
     return argc;
 }
 
+static void execute(char *argv[]) {
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("fork");
+        return;
+    }
+    if (pid == 0) {
+        execvp(argv[0], argv);
+        perror(argv[0]);
+        exit(EXIT_FAILURE);
+    } else {
+        wait(NULL);
+    }
+}
+
 int main(void) {
     char buf[BUF_SIZE];
     char *argv[MAX_ARGS];
@@ -37,8 +55,10 @@ int main(void) {
             continue;
 
         int argc = parse(buf, argv);
-        for (int i = 0; i < argc; i++)
-            printf("argv[%d] = %s\n", i, argv[i]);
+        if (argc == 0)
+            continue;
+
+        execute(argv);
     }
 
     return 0;
