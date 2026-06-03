@@ -42,10 +42,18 @@ static void execute(char *argv[]) {
     }
 }
 
-/* 반환값: 빌트인이면 1, 아니면 0 */
 static int builtin(char *argv[]) {
     if (strcmp(argv[0], "exit") == 0)
         exit(0);
+
+    /* cd: execvp로는 현재 프로세스 cwd를 못 바꾸므로 빌트인 처리 */
+    if (strcmp(argv[0], "cd") == 0) {
+        const char *path = argv[1] ? argv[1] : getenv("HOME");
+        if (chdir(path) < 0)
+            perror("cd");
+        return 1;
+    }
+
     return 0;
 }
 
